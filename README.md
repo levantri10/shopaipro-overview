@@ -27,15 +27,11 @@ Storefront · API Gateway · Quản lý API key, credit & usage
 
 ## Giới thiệu
 
-> **Repository giới thiệu:** repo công khai này chỉ chứa README và logo thương hiệu, không kèm source code. Các đường dẫn file, cấu trúc thư mục và lệnh phát triển bên dưới mô tả mã nguồn nội bộ; chúng không có sẵn để tải từ repo này. Website: **[https://shopaipro.tech](https://shopaipro.tech)**.
+**SHOP AI PRO** là nền tảng kết hợp storefront, tài khoản khách hàng, đơn hàng và quyền truy cập model AI. Khách hàng có thể xem sản phẩm, theo dõi đơn hàng, quản lý API key, credit và mức sử dụng; quản trị viên quản lý nội dung, sản phẩm, thanh toán và hỗ trợ.
 
-**SHOP AI PRO** kết hợp storefront, tài khoản khách hàng, đơn hàng và quyền truy cập model AI trong một hệ thống. Khách hàng có thể xem sản phẩm, theo dõi đơn hàng, quản lý API key, credit và mức sử dụng; quản trị viên quản lý nội dung, sản phẩm, thanh toán và các hoạt động hỗ trợ.
+Hệ thống được tổ chức thành **giao diện web**, **các dịch vụ nghiệp vụ**, **cổng truy cập AI** và **các thành phần tích hợp**. Mục tiêu là cung cấp trải nghiệm sử dụng thống nhất, quản lý quyền truy cập rõ ràng và theo dõi tài nguyên theo tài khoản.
 
-Mã nguồn dự án được tổ chức thành **giao diện web**, **các dịch vụ Go độc lập**, công cụ chuyển đổi từ backend Python và cấu hình triển khai. 
-
-Mục tiêu của kiến trúc là tách các miền nghiệp vụ, giữ giao dịch và số dư có thể đối chiếu, đồng thời cung cấp một cổng truy cập model thống nhất cho ứng dụng và công cụ lập trình.
-
-> **Phạm vi README:** tài liệu giới thiệu mã nguồn và hướng dẫn phát triển. Hệ thống có nhiều tích hợp và cấu hình theo môi trường; chạy riêng frontend hoặc một dịch vụ Go không đồng nghĩa khởi động toàn bộ nền tảng. Trạng thái triển khai và các bước vận hành hiện hành được ghi trong tài liệu VPS (`deploy/azure/OWNER_VPS.md`).
+> **Phạm vi README:** giới thiệu sản phẩm và kiến trúc tổng quát. Repository chỉ chứa tài liệu công khai và logo thương hiệu; không kèm source code hoặc cấu hình vận hành.
 
 ## Tính năng
 
@@ -60,277 +56,103 @@ Các nhóm chức năng có mã nguồn trong dự án; khả năng sử dụng 
 
 ```mermaid
 flowchart TB
-    U[Khách hàng / quản trị / API client] --> EDGE[Cloudflare / Caddy ingress]
-    EDGE --> WEB[Next.js frontend]
-    EDGE --> API[Go services theo miền]
-    EDGE --> GW[Go model gateway]
+    U[Khách hàng / quản trị / API client] --> EDGE[Cổng truy cập]
+    EDGE --> WEB[Giao diện web]
+    EDGE --> API[Dịch vụ nghiệp vụ]
+    EDGE --> GW[Cổng AI]
     WEB --> API
-    API --> PG[(PostgreSQL)]
-    API --> RD[(Redis)]
-    W[Go workers] --> PG
-    W --> RD
-    API --> NEW[Hệ thống: tài nguyên và quota]
-    GW --> NEW
-    GW --> ROUTER[Hệ thống: định tuyến provider]
-    NEW --> ROUTER
-    ROUTER --> PROVIDER[Nhà cung cấp model]
-    API --> EXT[Firebase / PayOS / PayPal / email / lưu trữ]
+    API --> DATA[(Dữ liệu và bộ nhớ đệm)]
+    WORK[Tác vụ nền] --> DATA
+    API --> ACCESS[Hệ thống: tài nguyên và quota]
+    GW --> ACCESS
+    GW --> ROUTING[Hệ thống: định tuyến model]
+    ACCESS --> ROUTING
+    ROUTING --> PROVIDER[Nhà cung cấp model]
+    API --> EXT[Dịch vụ tích hợp]
 ```
 
-Sơ đồ thể hiện quan hệ tổng quát. Tuyến cụ thể phụ thuộc model, loại key, entitlement và cấu hình upstream; không phải mọi request đều đi qua cùng một chuỗi.
+Sơ đồ mô tả quan hệ ở mức tổng quát. Luồng xử lý cụ thể phụ thuộc sản phẩm, model, quyền tài khoản và cấu hình của từng môi trường.
 
-### Dịch vụ
+### Các thành phần chính
 
-Backend dùng Fiber v3, pgx và go-redis. Mỗi dịch vụ chạy bằng executable riêng và có lifecycle, pool kết nối, dependency và route tương ứng.
-
-| Dịch vụ | Cổng local mặc định | Trách nhiệm chính |
-| --- | --- | --- |
-| `identity` | `127.0.0.1:8082` | Danh tính, xác thực, phiên người dùng/quản trị |
-| `catalog` | `127.0.0.1:8083` | Danh mục, sản phẩm và thông tin catalog |
-| `content` | `127.0.0.1:8084` | Nội dung, hướng dẫn, FAQ, chính sách và thiết lập |
-| `commerce` | `127.0.0.1:8085` | Đơn hàng, ví, thanh toán và nghiệp vụ thương mại |
-| `provisioning` | `127.0.0.1:8086` | Key, entitlement, credit, usage và Limit |
-| `gateway` | `127.0.0.1:8087` | Model gateway và AI Chat |
-| `support` | `127.0.0.1:8088` | Liên hệ, hỗ trợ và tương tác |
-| `adminops` | `127.0.0.1:8089` | Thao tác quản trị/vận hành |
-| `worker` | Không có HTTP listener | Một loại công việc nền được cấu hình rõ ràng |
-| `migrate` | Không có HTTP listener | Migration và các thao tác schema được chỉ định |
-| `backupcheck` | Không có HTTP listener | Kiểm tra bản phục hồi ngoại tuyến |
-
-Các cổng trên là mặc định phát triển trong mã nguồn, không phải danh sách cổng public của Production. `cmd/server` là entrypoint tương thích để chọn **một** miền bằng `SHOPAI_SERVICE`, không phải một server gộp toàn bộ dịch vụ.
-
-### Dữ liệu và thành phần liên quan
-
-- **PostgreSQL:** dữ liệu nghiệp vụ, sổ credit, trạng thái xử lý và các giao dịch liên quan.
-- **Redis:** cache, giới hạn request và các dependency runtime tương ứng.
-- **Hệ thống:** tài nguyên gateway, token/quota và điều phối tương ứng hợp đồng tích hợp.
-- **Hệ thống:** định tuyến tài khoản/provider; có dữ liệu SQLite riêng theo cấu hình triển khai.
-- **Dịch vụ ngoài:** Firebase, Cloudinary/R2, Turnstile, email và thanh toán chỉ hoạt động khi có cấu hình hợp lệ.
-
-`backend/` giữ mã Python legacy cùng oracle phục vụ đối chiếu/chuyển đổi. Không xóa hoặc coi nó là dependency đã hết vai trò chỉ dựa vào việc một dịch vụ Go đã build được. Backend Go README (`backend-go/README.md`) chứa chi tiết triển khai và lịch sử kiểm chứng.
+| Thành phần | Vai trò |
+| --- | --- |
+| Giao diện | Cửa hàng, tài khoản, quản trị và trò chuyện AI |
+| Danh tính | Đăng nhập, xác thực và quản lý quyền |
+| Danh mục & nội dung | Sản phẩm, hướng dẫn, FAQ và chính sách |
+| Thương mại | Đơn hàng, ví, thanh toán và đối soát |
+| Hệ thống tài nguyên | API key, credit, quota và quyền sử dụng |
+| Hệ thống định tuyến | Điều phối yêu cầu tới model và tuyến xử lý phù hợp |
+| Hỗ trợ | Liên hệ, thông báo và tương tác người dùng |
+| Tác vụ nền | Đồng bộ, xử lý hàng đợi và công việc định kỳ |
 
 ## Công nghệ
 
-| Thành phần | Công nghệ / cấu hình trong source |
+| Thành phần | Công nghệ tiêu biểu |
 | --- | --- |
-| Backend chính | Go, Fiber v3, pgx v5, go-redis v9 |
-| Toolchain Go | `go.mod` khai báo Go 1.26.0; Docker/CI hiện chọn Go 1.27 |
-| Frontend | Next.js 16.3.5, React 19.2.6, TypeScript 5.9, Tailwind CSS 4 |
-| Node.js | `frontend/package.json` yêu cầu từ 20.9; nên dùng Node.js 24 thống nhất môi trường |
-| Database | PostgreSQL; target Compose native dùng PostgreSQL 17 |
-| Container & ingress | Docker Compose, Caddy, Cloudflare theo môi trường |
-| Công cụ chuẩn bị/kiểm chứng | Python 3.12, công cụ Go/SQL và kiểm thử frontend |
+| Backend | Go, Fiber |
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Dữ liệu | PostgreSQL, Redis |
+| Triển khai | Container, reverse proxy và nền tảng đám mây |
+| Tích hợp | Xác thực, thanh toán, lưu trữ và dịch vụ AI |
 
-Phiên bản chi tiết nằm trong go.mod (`backend-go/go.mod`), package.json (`frontend/package.json`), lockfile và Dockerfile. Không có huy hiệu build/coverage để khẳng định một lần CI chưa được kiểm tra trong phiên biên soạn tài liệu này.
+Kiến trúc và cấu hình có thể được điều chỉnh theo nhu cầu của từng môi trường.
 
 ## Chạy local
 
-### Chọn đúng phạm vi
+Đây là mô tả quy trình phát triển ở mức tổng quát; source code và cấu hình triển khai không được cung cấp trong repository giới thiệu.
 
-| Nhu cầu | Cách bắt đầu |
-| --- | --- |
-| Xem/chỉnh giao diện | Chạy frontend, trỏ vào backend phát triển của bạn |
-| Phát triển một miền Go | Chạy executable tương ứng với PostgreSQL/Redis local |
-| Kiểm tra toàn bộ stack | Dùng `deploy/go-native`, chuẩn bị các repo tích hợp và secrets riêng |
-| Vận hành hệ thống hiện có | Đọc runbook trong `deploy/azure`, không dùng lệnh khởi tạo mới |
+1. Chuẩn bị công cụ và môi trường phát triển phù hợp.
+2. Cài dependency cho giao diện và dịch vụ nghiệp vụ.
+3. Thiết lập cơ sở dữ liệu, bộ nhớ đệm và tích hợp bằng tài khoản phát triển riêng.
+4. Khởi động các thành phần cần sử dụng và kiểm tra kết nối.
+5. Kiểm thử chức năng với dữ liệu thử nghiệm trước khi triển khai.
 
-### 1. Giao diện Next.js
-
-Từ thư mục gốc dự án:
-
-```powershell
-cd frontend
-npm ci
-Copy-Item .env.example .env.local
-```
-
-Trên macOS/Linux, thay lệnh sao chép bằng `cp .env.example .env.local`.
-
-Kiểm tra cấu hình trước khi chạy:
-
-| Biến | Mục đích |
-| --- | --- |
-| `NEXT_PUBLIC_BACKEND_URL` | URL backend/ingress dành cho môi trường phát triển |
-| `SHOPAI_INTERNAL_BACKEND_URL` | Tùy chọn URL backend nội bộ cho rewrite phía server |
-| `MODEL_GATEWAY_URL` | Origin gateway cho các tuyến model tương ứng |
-| `NEXT_PUBLIC_SHOP_TIMEZONE` | Múi giờ giao diện, ví dụ `Asia/Ho_Chi_Minh` |
-| `NEXT_PUBLIC_FIREBASE_*` | Cấu hình Firebase client của project bạn dùng |
-| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Site key Turnstile khi bật luồng cần challenge |
-
-Ví dụ có sẵn dùng backend `http://localhost:8080`; đây không phải cổng mặc định của một executable Go cụ thể. Khi dùng stack Go, hãy trỏ vào ingress đã cấu hình hoặc backend phát triển đúng phạm vi. Không sử dụng dịch vụ Production để thử thao tác ghi.
-
-```bash
-npm run dev
-```
-
-Frontend mặc định mở tại `http://localhost:3000`. Nếu backend hoặc tích hợp chưa chạy, các chức năng cần dữ liệu/xác thực sẽ chưa hoạt động đầy đủ.
-
-### 2. Một dịch vụ Go độc lập
-
-Chuẩn bị **database phát triển riêng**, Redis và schema phù hợp. Executable Go đọc biến môi trường tiến trình; không giả định có tự động nạp một file `.env` chung ở root.
-
-Ví dụ cấu hình PowerShell cho dịch vụ catalog:
-
-```powershell
-cd backend-go
-$env:DATABASE_URL='postgres://DEV_USER:DEV_PASSWORD@127.0.0.1:5432/shopai_dev?sslmode=disable'
-$env:REDIS_URL='redis://127.0.0.1:6379/0'
-$env:LISTEN_ADDRESS='127.0.0.1:8083'
-$env:IDENTITY_INTERNAL_URL='http://127.0.0.1:8082'
-$env:IDENTITY_SERVICE_TOKEN = node -e "process.stdout.write(require('node:crypto').randomBytes(32).toString('hex'))"
-go mod download
-# Chỉ với database phát triển MỚI, trống:
-go run ./cmd/migrate
-# Khởi động dịch vụ cần phát triển:
-go run ./cmd/catalog
-```
-
-Các giá trị `DEV_USER`/`DEV_PASSWORD` là placeholder, cần thay bằng tài khoản local của bạn. Ví dụ tạo service token ngẫu nhiên cho môi trường mới; khi chạy thêm identity hoặc dịch vụ liên quan, cấu hình cùng token ở đúng các bên cần giao tiếp, không sinh lại mỗi bên một giá trị khác nhau. `sslmode=disable` trong ví dụ chỉ dành cho loopback phát triển; dùng TLS phù hợp cho kết nối qua mạng.
-
-- `GET /health`: kiểm tra tiến trình/danh tính dịch vụ.
-- `GET /ready`: kiểm tra dependency theo dịch vụ, gồm database và Redis. Không expose endpoint nội bộ này qua ingress public.
-- Database đã có dữ liệu/legacy history cần quy trình riêng; **không chạy fresh migration lên Production hoặc database đang dùng**.
-- Chức năng xác thực/quản trị/cấp key cần capability token, dependency và feature flag tương ứng. Catalog khởi động không có nghĩa commerce/gateway đã hoạt động.
-
-Tham khảo cấu hình backend Go (`backend-go/README.md`) và hướng dẫn adoption legacy (`backend-go/LEGACY_ADOPTION.md`) trước khi chọn thao tác schema.
-
-### 3. Stack Docker native đầy đủ
-
-Cần Linux Docker, Compose hỗ trợ `env_file format: raw` (từ 2.30), Python 3.12 cùng các gói trong tools/requirements.txt (`backend-go/tools/requirements.txt`), và source tích hợp Hệ thống đúng cấu hình build.
-
-```powershell
-python -m pip install -r backend-go/tools/requirements.txt
-cd deploy/go-native
-python prepare.py init
-python prepare.py bootstrap
-docker compose --profile bootstrap config --quiet
-```
-
-Đây là các bước chuẩn bị/kiểm tra cấu hình. `init` chỉ dùng cho môi trường mới và tạo secrets riêng; không dùng để thay mật mã gốc của dữ liệu đã tồn tại. Sau đó thiết lập provider dashboards, credentials và integrations theo README native deployment (`deploy/go-native/README.md`) trước khi render/chạy profile `native`.
-
-Không có một file `.env` mẫu duy nhất đủ khởi động mọi thành phần; secrets runtime được tạo/render theo service. Đọc đường dẫn build và yêu cầu repo tích hợp trong cấu hình Compose trước khi build.
+Thông số kết nối, cổng dịch vụ và quyền truy cập được quản lý riêng theo môi trường.
 
 ## API và xác thực
 
-Hệ thống có nhiều loại credential, dùng cho các bề mặt khác nhau:
+Nền tảng cung cấp giao diện API cho ứng dụng và công cụ AI. Các nhóm truy cập chính gồm:
 
-| Bề mặt | Xác thực / mục đích |
+| Nhóm | Mục đích |
 | --- | --- |
-| Website khách hàng/quản trị | Phiên đăng nhập, cookie hoặc bearer và kiểm tra quyền theo route |
-| `/api/v1/token/*` | API Token client key/secret key, scope và entitlement |
-| `/v1/*` | Model API key/Bearer và quyền truy cập model theo gateway |
-| `/internal/*` | Capability/service token nội bộ; không công khai qua ingress |
+| Tài khoản | Hồ sơ, đơn hàng và thông tin sử dụng theo quyền |
+| API Token | Tự động hóa với phạm vi quyền được cấp |
+| Model API | Gửi yêu cầu tới model bằng key và quyền sử dụng tương ứng |
 
-### API Token
+Mỗi yêu cầu được kiểm tra thông tin xác thực, trạng thái tài khoản, quyền truy cập và hạn mức phù hợp. API Token và model key phục vụ các mục đích khác nhau; hãy sử dụng đúng loại credential theo hướng dẫn.
 
-```http
-X-ShopAI-Client-Key: <CLIENT_KEY>
-X-ShopAI-Secret-Key: <SECRET_KEY>
-```
-
-Ví dụ đọc usage từ môi trường của bạn:
-
-```bash
-curl https://YOUR_SHOP_DOMAIN/api/v1/token/account/usage \
-  -H "X-ShopAI-Client-Key: $SHOPAI_CLIENT_KEY" \
-  -H "X-ShopAI-Secret-Key: $SHOPAI_SECRET_KEY"
-```
-
-Token bị kiểm tra trạng thái tài khoản, hạn dùng, scope, quota và rate limit. Các model route và API Token không dùng thay nhau một cách tự động; không lấy secret của API Token để đoán rằng đó là model key. Xem API Token Guide (`docs/API_TOKEN_GUIDE.md`) và Model API Examples (`docs/MODEL_API_EXAMPLES.md`).
-
-### Model gateway
-
-Client model sử dụng public base URL dạng `https://YOUR_SHOP_DOMAIN/v1`, key và model được cấp cho tài khoản. Protocol có thể là Responses, Chat Completions hoặc Messages tùy route/model; kiểm tra quyền và danh sách model trước khi cấu hình client.
-
-Hướng dẫn client trong repo:
-
-- ShopAIPro Launcher (`docs/SHOPAIPRO_LAUNCHER_GUIDE.md`).
-- Đồng bộ model (`docs/SHOPAIPRO_MODEL_SYNC_GUIDE.md`).
-- Điều phối API và credit (`docs/INFERENCE_ROUTING_AND_CREDIT.md`).
+Các giao thức có thể bao gồm Responses, Chat Completions hoặc Messages tùy model và sản phẩm. Hướng dẫn cấu hình client và ví dụ sử dụng được công bố tại [trang tài liệu chính thức](https://shopaipro.tech/docs).
 
 ## Kiểm thử và kiểm chứng
 
-README này được biên soạn bằng việc đọc mã nguồn và cấu hình; **không chạy lại toàn bộ test, không khởi động stack và không xác nhận Production trong lần cập nhật này**.
+Các nhóm kiểm tra gồm logic nghiệp vụ, dữ liệu đầu vào, xác thực, quyền truy cập, giao diện và khả năng kết nối dịch vụ AI. Các luồng liên quan đến credit, quota và thanh toán cần được đối chiếu tính nhất quán của trạng thái giao dịch.
 
-Các lệnh phát triển thường dùng:
-
-```bash
-# Từ frontend/
-npm run lint
-npm run test:api-token-scopes
-npm run build
-
-# Từ backend-go/, trong môi trường test đã chuẩn bị
-go mod verify
-go vet ./...
-go test ./...
-go build ./...
-```
-
-Một số kiểm tra cần PostgreSQL, Redis, oracle Python hoặc các service tích hợp; chỉ nhìn exit code của một selection không đủ để kết luận toàn bộ hệ thống đã đạt parity. Không chạy integration test vào database thật. Chi tiết prerequisite, phạm vi selection và CI gate nằm trong backend-go/CI.md (`backend-go/CI.md`).
-
-Các workflow nằm tại .github/workflows (`.github/workflows`), gồm kiểm chứng Go native, container bootstrap, schema compatibility và các pipeline triển khai liên quan. Không suy ra một workflow đã pass chỉ từ việc file workflow tồn tại.
+Kết quả kiểm chứng phụ thuộc phiên bản và môi trường thực tế. Repository giới thiệu không công bố cấu hình kiểm thử hoặc báo cáo vận hành nội bộ.
 
 ## Triển khai và vận hành
 
-Stack native tách frontend, tám miền HTTP Go, worker, gateway dependencies và data services. Ingress public và listener quản trị nội bộ có ranh giới riêng; PostgreSQL, Redis, dashboard provider và service nội bộ không cần cổng public.
+Các thành phần được triển khai độc lập và kết nối qua cổng truy cập thống nhất. Cấu hình được lựa chọn theo quy mô, tải sử dụng và yêu cầu của môi trường.
 
-Tài liệu hiện hành mô tả runtime production trên Azure qua Cloudflare/Caddy. README không sao chép subscription ID, địa chỉ mạng riêng, đường dẫn private key hoặc thông tin phục hồi của chủ hệ thống. Dùng đúng runbook và quyền vận hành của môi trường đích.
-
-| Tài liệu | Sử dụng khi |
-| --- | --- |
-| Native Go deployment (`deploy/go-native/README.md`) | Dựng cấu hình dịch vụ/ingress và chuẩn bị môi trường native |
-| Owner VPS runbook (`deploy/azure/OWNER_VPS.md`) | Vận hành hệ thống đang triển khai, đọc quy trình delivery/rollback |
-| VPS rebuild (`deploy/azure/VPS_REBUILD.md`) | Dựng/phục hồi môi trường theo biên bản và cấu hình của chủ hệ thống |
-| Recovery (`backend-go/RECOVERY.md`) | Kiểm chứng phục hồi dữ liệu và ranh giới service/database |
-| Legacy adoption (`backend-go/LEGACY_ADOPTION.md`) | Chuyển đổi schema/dữ liệu legacy có quy trình và điều kiện ràng buộc |
-
-`deploy/single-vps` là tài liệu nền tảng chuyển tiếp cũ có Python. Không trộn hướng dẫn của nó với stack native hiện tại hoặc coi các checkpoint cũ trong tài liệu dài là trạng thái triển khai mới nhất.
+Quy trình vận hành gồm kiểm tra cấu hình, triển khai phiên bản, theo dõi trạng thái, sao lưu dữ liệu và phục hồi khi cần. Thông số hạ tầng, hướng dẫn quản trị và tài liệu vận hành chi tiết được quản lý riêng.
 
 ## Bảo mật và quản lý cấu hình
 
-- Phân biệt Firebase client config với service-account private key; bí mật server không dùng tiền tố `NEXT_PUBLIC_`.
-- Không commit `.env`, provider credentials, API key, service token, database dump hoặc dữ liệu khách hàng.
-- Dùng secret riêng cho các vai trò/signing/encryption/capability mà cấu hình yêu cầu; không thay tất cả bằng cùng một giá trị để vượt validation.
-- Giữ `/internal/*`, `/ready` và dashboard provider ở ranh giới nội bộ theo ingress.
-- Các luồng thanh toán dựa vào webhook/chứng cứ server đã xác minh; không coi browser return URL là bằng chứng đã thanh toán.
-- Giữ nguyên cryptographic roots khi phục hồi dữ liệu đã mã hóa; không chạy bộ sinh credentials mới như một cách sửa dữ liệu cũ.
+- Phân quyền theo vai trò và mục đích sử dụng.
+- Quản lý riêng thông tin xác thực và cấu hình nhạy cảm.
+- Kiểm tra dữ liệu đầu vào, hạn mức và trạng thái giao dịch.
+- Bảo vệ kết nối giữa các thành phần và dịch vụ tích hợp.
+- Theo dõi, sao lưu và kiểm tra khả năng phục hồi theo môi trường.
 
-## Cấu trúc repository
+Không công khai API key, dữ liệu khách hàng hoặc cấu hình quản trị trong repository giới thiệu.
 
-```text
-shopaipro-go/
-├── frontend/                 # Next.js storefront, console, admin và AI Chat
-│   ├── app/                  # App Router và các trang/tuyến frontend
-│   ├── public/               # Tài nguyên và client installer/launcher
-│   └── scripts/              # Công cụ phát triển và kiểm tra frontend
-├── backend-go/
-│   ├── cmd/                  # Entrypoint dịch vụ, worker và công cụ vận hành
-│   ├── internal/             # Miền nghiệp vụ, persistence, HTTP và integration
-│   ├── tools/                # Công cụ kiểm chứng, oracle và fixture
-│   ├── README.md             # Chi tiết backend và checkpoint triển khai
-│   ├── CI.md                 # Phạm vi kiểm chứng/CI
-│   └── RECOVERY.md            # Kiểm chứng phục hồi
-├── backend/                  # Python legacy và nguồn đối chiếu chuyển đổi
-├── deploy/
-│   ├── go-native/            # Compose, ingress và render cấu hình native
-│   ├── azure/                # Delivery, vận hành, backup và rebuild
-│   └── single-vps/           # Foundation chuyển tiếp cũ
-├── docs/                     # API Token, model, client và tài liệu kiến trúc
-├── .github/workflows/        # Pipeline kiểm chứng/triển khai
-└── README.md                 # Giới thiệu và điểm bắt đầu đọc dự án
-```
+## Phạm vi công khai
+
+Repository chỉ bao gồm **README giới thiệu** và **logo từ website chính thức**. Mã nguồn, cấu trúc thư mục phát triển và tài liệu vận hành không nằm trong phạm vi công khai.
 
 ## Tài liệu
 
-- Backend Go (`backend-go/README.md`) — triển khai, feature flag, lệnh local và lịch sử kiểm chứng.
-- API Token (`docs/API_TOKEN_GUIDE.md`) — credential, scope và quyền truy cập.
-- Model examples (`docs/MODEL_API_EXAMPLES.md`) — ví dụ các giao thức model.
-- Routing & Credit (`docs/INFERENCE_ROUTING_AND_CREDIT.md`) — mô hình credit, cấp quyền và điều phối.
-- Launcher (`docs/SHOPAIPRO_LAUNCHER_GUIDE.md`) — công cụ cấu hình client.
-- Model sync (`docs/SHOPAIPRO_MODEL_SYNC_GUIDE.md`) — đồng bộ danh sách model.
-- CI (`backend-go/CI.md`) — điều kiện kiểm thử và cách diễn giải kết quả.
-- Native deployment (`deploy/go-native/README.md`) — cấu hình và ranh giới stack.
+Tài liệu dành cho người sử dụng được cung cấp tại [shopaipro.tech/docs](https://shopaipro.tech/docs), gồm hướng dẫn API, cấu hình công cụ và thông tin sử dụng dịch vụ.
 
 ## Liên kết chính thức
 
@@ -352,14 +174,13 @@ Thông tin model, giá và gói dịch vụ có thể thay đổi; xem website �
 - **Dự án:** SHOP AI PRO.
 - **Mục đích:** giới thiệu sản phẩm, chức năng và kiến trúc tổng quát.
 - **Website chính thức:** [https://shopaipro.tech](https://shopaipro.tech).
-- **Đơn vị quản lý repository:** [levantri10](https://github.com/levantri10).
-- **Phạm vi công khai:** README và logo lấy từ website chính thức; không công khai source code, secrets hoặc dữ liệu khách hàng.
-- **Tài liệu nội bộ:** các đường dẫn trong phần phát triển là tham chiếu mô tả, không phải file có thể tải từ repository này.
+- **Phạm vi:** tài liệu giới thiệu và logo; không công khai source code, secrets hoặc dữ liệu khách hàng.
+- **Thông tin kỹ thuật:** mô tả chung, không công bố cấu hình triển khai chi tiết.
 - **Cập nhật tài liệu:** 05/11/2026.
 
 ## Quyền sử dụng
 
-README này không cấp mới hoặc thay đổi giấy phép mã nguồn. Trước khi tái sử dụng hoặc phân phối, xác nhận điều kiện với chủ dự án và kiểm tra riêng giấy phép của Hệ thống cùng các dependency. Không gắn nhãn MIT/AGPL hoặc tuyên bố open source cho repository khi chưa có quyết định tương ứng của chủ sở hữu.
+Repository giới thiệu không cấp mới hoặc thay đổi giấy phép mã nguồn. Nếu có nhu cầu sử dụng tài liệu, thương hiệu hoặc trao đổi về dự án, hãy liên hệ qua các kênh chính thức.
 
 ---
 
@@ -367,6 +188,6 @@ README này không cấp mới hoặc thay đổi giấy phép mã nguồn. Trư
 
 **SHOP AI PRO** · Storefront, API access và model orchestration trên cùng một nền tảng.
 
-[Website](https://shopaipro.tech) · Tài liệu backend (`backend-go/README.md`) · Hướng dẫn triển khai (`deploy/go-native/README.md`)
+[Website](https://shopaipro.tech) · [Tài liệu sử dụng](https://shopaipro.tech/docs) · [Hỗ trợ](https://shopaipro.tech/faq)
 
 </div>
