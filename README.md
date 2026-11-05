@@ -1,10 +1,16 @@
 <div align="center">
 
+<a href="https://shopaipro.tech"><img src="docs/assets/shopaipro-logo.svg" width="112" height="112" alt="Logo SHOP AI PRO"></a>
+
 # SHOP AI PRO
 
 **Nền tảng cung cấp dịch vụ AI, quản lý API key, credit và điều phối model.**
 
-Giao diện Next.js · Backend Go theo miền nghiệp vụ · Hệ thống
+Storefront · API Gateway · Quản lý API key, credit & usage
+
+[![Website](https://img.shields.io/badge/Website-shopaipro.tech-1689FF?style=flat-square)](https://shopaipro.tech)
+[![Tài liệu](https://img.shields.io/badge/Docs-Hướng_dẫn-2677FF?style=flat-square)](https://shopaipro.tech/docs)
+[![Repository](https://img.shields.io/badge/Repository-Overview_only-64748B?style=flat-square)](#về-repository-này)
 
 ![Go](https://img.shields.io/badge/Go-1.27-00ADD8?style=flat-square&logo=go&logoColor=white)
 ![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white)
@@ -21,7 +27,7 @@ Giao diện Next.js · Backend Go theo miền nghiệp vụ · Hệ thống
 
 ## Giới thiệu
 
-> **Repository giới thiệu:** repo công khai này chỉ chứa README, không kèm source code. Các đường dẫn file, cấu trúc thư mục và lệnh phát triển bên dưới mô tả mã nguồn nội bộ; chúng không có sẵn để tải từ repo này. Website: **[https://shopaipro.tech](https://shopaipro.tech)**.
+> **Repository giới thiệu:** repo công khai này chỉ chứa README và logo thương hiệu, không kèm source code. Các đường dẫn file, cấu trúc thư mục và lệnh phát triển bên dưới mô tả mã nguồn nội bộ; chúng không có sẵn để tải từ repo này. Website: **[https://shopaipro.tech](https://shopaipro.tech)**.
 
 **SHOP AI PRO** kết hợp storefront, tài khoản khách hàng, đơn hàng và quyền truy cập model AI trong một hệ thống. Khách hàng có thể xem sản phẩm, theo dõi đơn hàng, quản lý API key, credit và mức sử dụng; quản trị viên quản lý nội dung, sản phẩm, thanh toán và các hoạt động hỗ trợ.
 
@@ -63,9 +69,9 @@ flowchart TB
     API --> RD[(Redis)]
     W[Go workers] --> PG
     W --> RD
-    API --> NEW[Hệ thống]
+    API --> NEW[Hệ thống: tài nguyên và quota]
     GW --> NEW
-    GW --> ROUTER[Hệ thống]
+    GW --> ROUTER[Hệ thống: định tuyến provider]
     NEW --> ROUTER
     ROUTER --> PROVIDER[Nhà cung cấp model]
     API --> EXT[Firebase / PayOS / PayPal / email / lưu trữ]
@@ -325,6 +331,31 @@ shopaipro-go/
 - Model sync (`docs/SHOPAIPRO_MODEL_SYNC_GUIDE.md`) — đồng bộ danh sách model.
 - CI (`backend-go/CI.md`) — điều kiện kiểm thử và cách diễn giải kết quả.
 - Native deployment (`deploy/go-native/README.md`) — cấu hình và ranh giới stack.
+
+## Liên kết chính thức
+
+| Kênh | Đường dẫn |
+| --- | --- |
+| Website | [shopaipro.tech](https://shopaipro.tech) |
+| Tài liệu sử dụng | [Hướng dẫn API và công cụ AI](https://shopaipro.tech/docs) |
+| Danh sách model | [Mô hình AI](https://shopaipro.tech/models) |
+| Bảng giá | [Giá dịch vụ](https://shopaipro.tech/pricing) |
+| Hỗ trợ | [Câu hỏi thường gặp](https://shopaipro.tech/faq) |
+| Email liên hệ | [contact@shopaipro.tech](mailto:contact@shopaipro.tech) |
+| Điều khoản | [Điều khoản dịch vụ](https://shopaipro.tech/terms) |
+| Quyền riêng tư | [Chính sách](https://shopaipro.tech/privacy) |
+
+Thông tin model, giá và gói dịch vụ có thể thay đổi; xem website để có thông tin hiện hành.
+
+## Về repository này
+
+- **Dự án:** SHOP AI PRO.
+- **Mục đích:** giới thiệu sản phẩm, chức năng và kiến trúc tổng quát.
+- **Website chính thức:** [https://shopaipro.tech](https://shopaipro.tech).
+- **Đơn vị quản lý repository:** [levantri10](https://github.com/levantri10).
+- **Phạm vi công khai:** README và logo lấy từ website chính thức; không công khai source code, secrets hoặc dữ liệu khách hàng.
+- **Tài liệu nội bộ:** các đường dẫn trong phần phát triển là tham chiếu mô tả, không phải file có thể tải từ repository này.
+- **Cập nhật tài liệu:** 05/11/2026.
 
 ## Quyền sử dụng
 
